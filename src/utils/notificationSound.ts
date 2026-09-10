@@ -7,6 +7,9 @@ class SoundManager {
     this.sounds.arrived = new Audio('/sounds/arrived.mp3');
     this.sounds.accepted = new Audio('/sounds/accepted.mp3');
     this.sounds.ready = new Audio('/sounds/ready.mp3');
+    this.sounds.readyy = new Audio('/sounds/readyy.mp3');
+    this.sounds.closed = new Audio('/sounds/closed.mp3');
+    this.sounds.stock = new Audio('/sounds/stock.mp3');
     this.sounds.store = new Audio('/sounds/store.mp3');
     this.sounds.picked = new Audio('/sounds/picked.mp3');
     this.sounds.delivered = new Audio('/sounds/delivered.mp3');
@@ -33,7 +36,7 @@ class SoundManager {
     window.addEventListener('pointerdown', unlock, { once: true });
   }
 
-  play(name: 'message' | 'arrived' | 'accepted' | 'ready' | 'store' | 'picked' | 'delivered') {
+  play(name: 'message' | 'arrived' | 'accepted' | 'ready' | 'readyy' | 'closed' | 'stock' | 'store' | 'picked' | 'delivered') {
     const audio = this.sounds[name];
     if (!audio) return;
 

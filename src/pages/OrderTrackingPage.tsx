@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../config/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { soundManager } from '../utils/notificationSound';
+import { useGlobalCart } from '../contexts/GlobalCartContext';
 
 interface OrderItem {
   name: string;
@@ -24,6 +25,7 @@ interface OrderData {
   fee?: number;
   total?: number;
   status?: string;
+  rejectionReason?: 'still_closed' | 'out_of_stock' | string;
   driverStatus?: string;
   driverId?: string | null;
   destinationAddress?: string;
@@ -150,8 +152,10 @@ export const OrderTrackingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { orderId, orderData: initialOrderData } = location.state || {};
+  const { clearCart } = useGlobalCart();
 
   const [orderData, setOrderData] = useState<OrderData>(initialOrderData || {});
+  const [rejectionMessage, setRejectionMessage] = useState<string | null>(null);
   const [preparingShown, setPreparingShown] = useState(false);
   const [rotatingMessage, setRotatingMessage] = useState('');
   const [messageIndex, setMessageIndex] = useState(0);
@@ -160,6 +164,7 @@ export const OrderTrackingPage: React.FC = () => {
   const preparingDelayRef = useRef<NodeJS.Timeout | null>(null);
   const transitionDelayRef = useRef<NodeJS.Timeout | null>(null);
   const messageRotationRef = useRef<NodeJS.Timeout | null>(null);
+  const rejectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousStatusRef = useRef<string | undefined>(initialOrderData?.status);
 
   // Calculate step states based on current Firestore data
@@ -202,19 +207,47 @@ export const OrderTrackingPage: React.FC = () => {
 
   useEffect(() => {
     const status = orderData.status;
-    if (status && status !== previousStatusRef.current) {
-      const soundByStatus: Record<string, 'accepted' | 'ready' | 'store' | 'picked' | 'delivered'> = {
+    if (!status || status === previousStatusRef.current) return;
+
+    if (status === 'ready_for_pickup') {
+      const itemCount = (orderData.items || []).reduce(
+        (total, item) => total + (item.quantity || 1),
+        0
+      );
+      soundManager.play(itemCount === 1 ? 'readyy' : 'ready');
+    } else if (status === 'rejected') {
+      const rejection = orderData.rejectionReason;
+      const rejectionDetails = rejection === 'still_closed'
+        ? { sound: 'closed' as const, message: 'Store is still closed, check with them later.' }
+        : rejection === 'out_of_stock'
+          ? { sound: 'stock' as const, message: 'This order just went out of stock.' }
+          : null;
+
+      if (rejectionDetails) {
+        soundManager.play(rejectionDetails.sound);
+        setRejectionMessage(rejectionDetails.message);
+        rejectionTimeoutRef.current = setTimeout(() => {
+          clearCart();
+          navigate('/');
+        }, 2000);
+      }
+    } else {
+      const soundByStatus: Record<string, 'accepted' | 'store' | 'picked' | 'delivered'> = {
         accepted: 'accepted',
-        ready_for_pickup: 'ready',
         at_store: 'store',
         picked_up: 'picked',
         delivered: 'delivered',
       };
       const sound = soundByStatus[status];
       if (sound) soundManager.play(sound);
-      previousStatusRef.current = status;
     }
-  }, [orderData.status]);
+
+    previousStatusRef.current = status;
+  }, [clearCart, navigate, orderData.items, orderData.rejectionReason, orderData.status]);
+
+  useEffect(() => () => {
+    if (rejectionTimeoutRef.current) clearTimeout(rejectionTimeoutRef.current);
+  }, []);
 
   // Handle "Preparing Items" delay when status becomes "accepted"
   useEffect(() => {
@@ -321,6 +354,20 @@ export const OrderTrackingPage: React.FC = () => {
 
   return (
     <div className="h-screen w-full bg-gray-50 dark:bg-gray-950 flex flex-col overflow-hidden">
+      <AnimatePresence>
+        {rejectionMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            role="alert"
+            className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-3 text-center text-sm text-white shadow-lg"
+          >
+            {rejectionMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* FIXED TOP PANEL - Store info */}
       <motion.div
         initial={{ y: -50, opacity: 0 }}
