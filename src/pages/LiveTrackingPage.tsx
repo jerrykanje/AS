@@ -9,6 +9,7 @@ import { MapLibreMap, MapMarker } from '../components/MapLibreMap';
 import { listenToDriverLocation } from '../services/trackingService';
 import { trimPolylineFromPosition } from '../utils/polylineUtils';
 import { useGlobalCart } from '../contexts/GlobalCartContext';
+import { soundManager } from '../utils/notificationSound';
 
 interface OrderItem {
   name: string;
@@ -153,6 +154,7 @@ export const LiveTrackingPage: React.FC = () => {
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const driverFromOrder = (orderData as any).driverSnapshot || (orderData as any).driver;
   const gpsListenerRef = useRef<(() => void) | null>(null);
+  const previousStatusRef = useRef<string | undefined>(initialOrderData?.status);
 
   // Run once on mount to seed the polyline/ETA from initialOrderData so the
   // route draws immediately, before the first Firestore snapshot fires.
@@ -181,6 +183,21 @@ export const LiveTrackingPage: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty deps — runs only on mount
+
+  useEffect(() => {
+    const status = orderData.status;
+    if (!status || status === previousStatusRef.current) return;
+
+    const soundByStatus: Record<string, 'store' | 'picked' | 'delivered'> = {
+      at_store: 'store',
+      picked_up: 'picked',
+      delivered: 'delivered',
+    };
+    const sound = soundByStatus[status];
+    if (sound) soundManager.play(sound);
+
+    previousStatusRef.current = status;
+  }, [orderData.status]);
 
   // Listen to order document in real-time
   // IMPORTANT: Driver info MUST come from the order document's "driver" field
